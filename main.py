@@ -5,6 +5,7 @@ import json
 import os
 from apis.deepseek_api import deepseek_stream_generator
 from apis.openai_api import openai_stream_generator
+from apis.langchain_test_api import agent_stream_generator
 # from api_keys import OPENAI_API_KEY, DEEPSEEK_API_KEY
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -27,6 +28,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.post("/api/langchain")
+async def agent_analysis(request: Request):
+    try:
+        data = await request.json()
+        query = data.get("query", "")
+        
+        async def event_stream():
+            async for chunk in agent_stream_generator(query):
+                if chunk["type"] == "done":
+                    yield "data: [DONE]\n\n"
+                else:
+                    # 添加SSE格式包装
+                    yield f"data: {json.dumps(chunk)}\n\n"
+        
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream"
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/openai")
 async def chat_completion(request: Request):
