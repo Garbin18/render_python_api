@@ -3,11 +3,11 @@ from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
 from supabase import create_client
-import json
 import os
-import asyncio
+import pandas as pd
 from typing import Dict, Any
 from fastapi.concurrency import run_in_threadpool
+import okx.MarketData as MarketData
 from api_keys import DEEPSEEK_API_KEY,SUPABASE_PUBLIC_KEY
 
 
@@ -17,21 +17,44 @@ SUPABASE_URL = 'https://zcmrdzzgbnsrslsglrjg.supabase.co'
 
 # 自定义工具：获取BTC价格
 @tool("get_crypto_price")
-def get_crypto_price() -> list:
-    """获取最新的BTC日线价格数据，包括开盘价、最高价、最低价、收盘价等信息"""
-    try:
-        client = create_client(SUPABASE_URL, SUPABASE_PUBLIC_KEY)
-        response = client.table("daily_crypto_klines")\
-                        .select("*")\
-                        .order("datetime", desc=True)\
-                        .limit(20)\
-                        .execute()
-        data = response.data if response.data else []
-        sorted_data = sorted(data, key=lambda x: x["datetime"])
-        print(sorted_data)
-        return sorted_data  
-    except Exception as e:
-        return ["Error"]
+def get_crypto_price(instId:str,bar:str,limit:int) -> pd.DataFrame:
+  """从okx的api获得K线数据，获取最新的BTC日线价格数据，包括开盘价、最高价、最低价、收盘价等信息"""
+  flag = "0"  # 实盘:0 , 模拟盘：1
+  marketDataAPI =  MarketData.MarketAPI(flag=flag)
+  # 获取交易产品K线数据
+  result = marketDataAPI.get_candlesticks(
+      instId=instId,
+      bar=bar,
+      limit=max(limit, 100)
+  )
+  # 转换为DataFrame并处理列名
+  data = result['data']
+  df = pd.DataFrame(data, columns=[
+      'timestamp', 'open', 'high', 'low', 'close',
+      'volume', 'vol_ccy', 'vol_ccy_quote', 'confirm'
+  ])
+  # 强制转换所有数值列为 float
+  numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+  df[numeric_cols] = df[numeric_cols].astype(float)
+  # 反转数据顺序（OKX默认返回的是倒序，最新数据在前）
+  df = df.iloc[::-1].reset_index(drop=True)
+  # 添加时间戳转换（东八区）并格式化为字符串
+  df['datetime'] = pd.to_datetime(df['timestamp'].astype(int)//1000, unit='s') + pd.Timedelta(hours=8)
+  df.set_index('datetime', inplace=True)
+  df.ta.macd(append=True)  # 结果会自动添加 MACD_12_26_9, MACDs_12_26_9, MACDh_12_26_9 三列
+  df.ta.rsi(length=14, append=True)  # 添加 RSI_14 列
+  df.ta.bbands(length=20, append=True)  # 添加 BBU_20_2.0, BBL_20_2.0, BBB_20_2.0 等列
+  df.ta.sma(length=30, append=True)   # 添加 SMA_30 列
+  df.ta.sma(length=60, append=True)  # 添加 SMA_60 列
+  df.ta.vwap(anchor='D', append=True)  # 添加 VWAP_D 列
+  df = df.reset_index()
+  df['instId'] = instId
+  # 精简列（保留关键字段）
+  cols = ['instId', 'datetime', 'open', 'high', 'low', 'close',  'volume', 'SMA_30', 'SMA_60', 'MACD_12_26_9', 'MACDh_12_26_9', 'MACDs_12_26_9', 'RSI_14']
+  df_subset = df[cols].copy()
+  # 精度压缩（减少小数位数）
+  df_subset = df_subset.round(2)
+  return df_subset.tail(20)
     
 prompt = ChatPromptTemplate.from_messages(
     [
@@ -58,7 +81,7 @@ tools = [get_crypto_price]
 
 agent = create_react_agent(model, tools,prompt=prompt)
 
-query = "基于当前价格，现在投资BTC合适吗？"
+# query = "基于当前价格，现在投资BTC合适吗？"
 
 def parse_stream_output(step: Dict[str, Any]) -> dict:
     """解析步骤数据为结构化字典"""
@@ -87,26 +110,7 @@ def parse_stream_output(step: Dict[str, Any]) -> dict:
         return {
             "type": "final_answer",
             "content": msg.content
-        }
-
-    # elif "agent" in step and step["agent"]["messages"][0].content:
-    #     msg = step["agent"]["messages"][0]
-    #     content = msg.content
-    #     for char in content:  # 可以按 char，也可以按 word/sentence
-    #         yield {
-    #             "type": "final_answer",
-    #             "content": char
-    #         }
-    #     return
-    
-    # elif "agent" in step and step["agent"]["messages"][0].content:
-    #     msg = step["agent"]["messages"][0]
-    #     return {
-    #         "type": "final_answer",
-    #         "content": msg.content,
-    #         "total_tokens": msg.usage_metadata.get('total_tokens', 0)
-    #     }
-    
+        } 
     return {"type": "unknown"}
 
 async def agent_stream_generator(query: str):
@@ -133,47 +137,3 @@ async def agent_stream_generator(query: str):
         except StopIteration:
             break
 
-
-    # """将同步流转换为异步生成器，并实现逐字输出"""
-    # def sync_stream():
-    #     for step in agent.stream({"messages": [("human", query)]}, stream_mode="updates"):
-    #         if "agent" in step and step["agent"]["messages"][0].content:
-    #             content = step["agent"]["messages"][0].content
-    #             for char in content:
-    #                 yield {"type": "final_answer", "content": char}
-    #         else:
-    #             parsed = parse_stream_output(step)
-    #             if isinstance(parsed, dict):
-    #                 yield parsed
-    #     yield {"type": "done"}
-
-    # gen = sync_stream()
-    # while True:
-    #     try:
-    #         chunk = await run_in_threadpool(next, gen)
-    #         yield chunk
-    #         if chunk.get("type") == "done":
-    #             break
-    #     except StopIteration:
-    #         break
-
-    
-    # """将同步流转换为异步生成器"""
-    # def sync_stream():
-    #     for step in agent.stream(
-    #         {"messages": [("human", query)]}, 
-    #         stream_mode="updates"
-    #     ):
-    #         yield parse_stream_output(step)
-    #     yield {"type": "done"}
-    
-    # gen = sync_stream()
-    # while True:
-    #     try:
-    #         # 使用线程池处理同步迭代
-    #         chunk = await run_in_threadpool(next, gen)
-    #         yield chunk
-    #         if chunk.get("type") == "done":
-    #             break
-    #     except StopIteration:
-    #         break
