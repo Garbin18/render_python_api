@@ -8,12 +8,12 @@ import os
 import asyncio
 from typing import Dict, Any
 from fastapi.concurrency import run_in_threadpool
-from api_keys import DEEPSEEK_API_KEY,SUPABASE_PUBLIC_KEY
+# from api_keys import DEEPSEEK_API_KEY,SUPABASE_PUBLIC_KEY
 
 
 SUPABASE_URL = 'https://zcmrdzzgbnsrslsglrjg.supabase.co'
-# SUPABASE_PUBLIC_KEY = os.getenv("SUPABASE_PUBLIC_KEY")
-# DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+SUPABASE_PUBLIC_KEY = os.getenv("SUPABASE_PUBLIC_KEY")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
 # 自定义工具：获取BTC价格
 @tool("get_crypto_price")
