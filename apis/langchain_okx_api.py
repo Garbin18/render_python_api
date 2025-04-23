@@ -17,7 +17,7 @@ DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
 # 自定义工具：获取BTC价格
 @tool("get_crypto_price")
-def get_crypto_price(instId:str,bar:str,limit:int) -> pd.DataFrame:
+def get_crypto_price(instId:str,bar:str,limit:int) -> list:
   """从okx的api获得K线数据，获取最新的BTC日线价格数据，包括开盘价、最高价、最低价、收盘价等信息"""
   flag = "0"  # 实盘:0 , 模拟盘：1
   marketDataAPI =  MarketData.MarketAPI(flag=flag)
@@ -54,7 +54,7 @@ def get_crypto_price(instId:str,bar:str,limit:int) -> pd.DataFrame:
   df_subset = df[cols].copy()
   # 精度压缩（减少小数位数）
   df_subset = df_subset.round(2)
-  result = df_subset.tail(20)
+  result = df_subset.tail(20).to_dict('records')
   print(result)
   return result
     
