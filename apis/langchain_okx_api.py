@@ -54,7 +54,9 @@ def get_crypto_price(instId:str,bar:str,limit:int) -> pd.DataFrame:
   df_subset = df[cols].copy()
   # 精度压缩（减少小数位数）
   df_subset = df_subset.round(2)
-  return df_subset.tail(20)
+  result = df_subset.tail(20)
+  print(result)
+  return result
     
 prompt = ChatPromptTemplate.from_messages(
     [
