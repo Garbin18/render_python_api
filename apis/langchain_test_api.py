@@ -28,6 +28,7 @@ def get_crypto_price() -> list:
                         .execute()
         data = response.data if response.data else []
         sorted_data = sorted(data, key=lambda x: x["datetime"])
+        print('type---->',type(sorted_data))
         print(sorted_data)
         return sorted_data  
     except Exception as e:
