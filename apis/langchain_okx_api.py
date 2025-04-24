@@ -4,6 +4,7 @@ from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
 from supabase import create_client
 import os
+import numpy as np
 import pandas as pd
 from typing import Dict, Any
 from fastapi.concurrency import run_in_threadpool
@@ -54,8 +55,15 @@ def get_crypto_price(instId:str,bar:str,limit=100) -> list:
     df_subset = df[cols].copy()
     # 精度压缩（减少小数位数）
     df_subset = df_subset.round(2)
-    df_subset['datetime'] = df_subset['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S')
+    df_subset['datetime'] = pd.to_datetime(df_subset['datetime']).dt.strftime('%Y-%m-%dT%H:%M:%S+08:00')
+    df_subset = df_subset.replace({
+        np.nan: 0.0, 
+        np.inf: 0.0,  
+        -np.inf: 0.0
+    })
     result = df_subset.tail(20).to_dict('records')
+    print("type---->", type(result))
+    print(result)
     return result
     
 prompt = ChatPromptTemplate.from_messages(
