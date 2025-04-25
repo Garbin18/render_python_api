@@ -5,4 +5,4 @@ langgraph>=0.3.30
 langchain-openai>=0.3.14
 supabase>=2.15.0
 python-okx>=0.3.7
-pandas-ta==0.3.14b0
+finta>=1.3
