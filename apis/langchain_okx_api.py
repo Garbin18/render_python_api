@@ -4,9 +4,11 @@ from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
 from supabase import create_client
 import os
+import json
 import numpy as np
 import pandas as pd
 from typing import Dict, Any
+import pandas_ta as ta
 from fastapi.concurrency import run_in_threadpool
 import okx.MarketData as MarketData
 # from api_keys import DEEPSEEK_API_KEY,SUPABASE_PUBLIC_KEY
